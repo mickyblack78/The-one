@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>X200 DIESEL - MASTER DASH</title>
+    <style>
+        body { background:#111; color:#0f0; font-family: monospace; padding:10px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        button { padding: 15px; border: 1px solid; background: #222; font-weight: bold; cursor: pointer; }
+        .btn-green { color: #0f0; border-color: #0f0; }
+        .btn-orange { color: orange; border-color: orange; }
+        .btn-red { color: red; border-color: red; }
+        .btn-blue { color: #00bfff; border-color: #00bfff; }
+        button:active { background: #444; }
+        #display { background: #000; border: 1px solid #333; height: 400px; overflow-y: auto; padding: 10px; font-size: 14px; }
+        .stat { color: #fff; margin-bottom: 2px; border-bottom: 1px solid #222; }
+    </style>
+</head>
+<body>
+    <h2 style="color:#fff; text-align:center;">X200 DIESEL - MASTER CONTROL</h2>
+    <div id="ecu-status" style="text-align:center; color:gray;">ECU: DISCONNECTED</div>
+    
+    <div class="grid">
+        <button class="btn-green" onclick="connect()">0. CONNECT & UNLOCK</button>
+        <button class="btn-green" onclick="checkFaults()">1. CHECK FAULTS</button>
+        <button class="btn-green" onclick="toggleStream()" id="streamBtn">2. LIVE VIEW</button>
+        <button class="btn-green" onclick="readPIDs()">3. PIDs</button>
+        <button class="btn-orange" onclick="readFreezeFrame()">4. FREEZE FRAME</button>
+        <button class="btn-red" onclick="clearFaults()">5. CLEAR FAULTS</button>
+        <button class="btn-red" onclick="disconnectPort()">6. DISCONNECT</button>
+        <button class="btn-red" onclick="clearLogs()">7. CLEAR LOGS</button>
+        <button class="btn-blue" onclick="uploadLogData()">8. UPLOAD LOG DATA</button>
+        <button onclick="requestLevel03()">TEST LEVEL 03</button>
+    </div>
+
+    <div id="display">READY...</div>
+
+    <script>
+        let port, streaming = false, pinger, isHandshaking = false, isAlive = false, attemptIndex = 0, lastSeed = "";
+        const disp = document.getElementById('display');
+        const log = (m) => { disp.innerHTML += `<div class="stat">> ${m}</div>`; disp.scrollTop = disp.scrollHeight; };
+
+        // --- UTILITY MATH FOR SECURITY ACCESS ---
+        const xorMath = (hex, key) => (parseInt(hex, 16) ^ parseInt(key, 16)).toString(16).toUpperCase();
+        const swapBytes = (hex) => hex.match(/../g).reverse().join("");
+        const reverseHex = (hex) => hex.split("").reverse().join("");
+        const addConstant = (hex, con) => (parseInt(hex, 16) + parseInt(con, 16)).toString(16).toUpperCase();
+
+        const keyGuesses = [
+            (seed) => xorMath(seed, "ABCD"),
+            (seed) => swapBytes(seed),
+            (seed) => xorMath(reverseHex(seed), "FFFF"),
+            (seed) => addConstant(seed, "5555")
+        ];
+
+        async function send(cmd) {
+            if (!port) return "";
+            const encoder = new TextEncoder();
+            const decoder = new TextDecoder();
+            const writer = port.writable.getWriter();
+            await writer.write(encoder.encode(cmd));
+            writer.releaseLock();
+
+            const reader = port.readable.getReader();
+            let res = "";
+            const timeout = Date.now() + 1500;
+            try {
+                while (Date.now() < timeout && !res.includes(">")) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    res += decoder.decode(value);
+                }
+            } finally { reader.releaseLock(); }
+            return res.trim().replace(/\s+/g, '');
+        }
+
+        function startPinger() {
+            if (pinger) clearInterval(pinger);
+            pinger = setInterval(async () => {
+                if (!port || streaming || isHandshaking) return;
+                let res = await send("3E00\r");
+                let statusEl = document.getElementById("ecu-status");
+                if (res.includes("7E") || res.includes("7F3E") || res.includes("3E")) {
+                    isAlive = true;
+                    statusEl.style.color = "green";
+                    statusEl.innerText = "ECU: CONNECTED";
+                } else {
+                    isAlive = false;
+                    statusEl.style.color = "red";
+                    statusEl.innerText = "ECU: DISCONNECTED";
+                }
+            }, 3000);
+        }
+
+        async function connect() {
+            try {
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 38400 });
+                log("INITIALIZING...");
+                await send("ATZ\r");
+                await send("ATSP6\r");
+                await send("ATSH7E0\r");
+                let auth = await send("1003\r");
+                if (auth.includes("5003")) {
+                    startPinger();
+                    let seedRes = await send("2701\r");
+                    if (seedRes.includes("6701")) {
+                        let unlock = await send("270255AA\r");
+                        if (unlock.includes("6702")) log("SUCCESS: ECU UNLOCKED");
+                    }
+                }
+            } catch (e) { log("ERROR: " + e.message); }
+        }
+
+        async function checkFaults() {
+            if (!port) return;
+            log("CHECKING DTCs...");
+            let res = await send("03\r");
+            log("FAULTS: " + res);
+        }
+
+        async function readPIDs() {
+            if (!port) return;
+            log("FETCHING LIVE DATA...");
+            const pids = ["010C", "0105", "0123"];
+            for (let pid of pids) {
+                let res = await send("22" + pid + "\r");
+                log(res.includes("62") ? "DATA [" + pid + "]: " + res : "ERR [" + pid + "]: " + res);
+            }
+        }
+
+        async function toggleStream() {
+            if (!port) return;
+            streaming = !streaming;
+            document.getElementById('streamBtn').innerText = streaming ? "STOP STREAM" : "2. LIVE VIEW";
+            while (streaming) {
+                let r = await send("22110C\r"); 
+                log("LIVE RPM: " + r);
+                await new Promise(r => setTimeout(r, 100));
+            }
+        }
+
+        async function requestLevel03() {
+            if (!port) { log("ERROR: NO CONNECTION"); return; }
+            isHandshaking = true;
+            log("Requesting Level 03 Seed...");
+            let res = await send("2703\r");
+            if (res.includes("6703")) {
+                lastSeed = res.split("6703")[1];
+                log("SEED RECEIVED: " + lastSeed);
+                await tryNextKey();
+            } else {
+                log("FAILED SEED: " + res);
+                isHandshaking = false;
+            }
+        }
+
+        async function tryNextKey() {
+            if (attemptIndex >= keyGuesses.length) attemptIndex = 0;
+            let calculatedKey = keyGuesses[attemptIndex](lastSeed);
+            log(`ATTEMPT #${attemptIndex + 1}: Trying [${calculatedKey}]`);
+            let res = await send("2704" + calculatedKey + "\r");
+            if (res.includes("6704")) {
+                log("SUCCESS! Level 03 Unlocked.");
+            } else {
+                log("KEY FAILED: " + res);
+                attemptIndex++;
+            }
+            isHandshaking = false;
+        }
+
+        async function readFreezeFrame() { if (port) log("DATA: " + await send("020000\r")); }
+        async function clearFaults() { if (port && confirm("Clear ECU Faults?")) log("RES: " + await send("04\r")); }
+        function clearLogs() { disp.innerHTML = ""; }
+        function uploadLogData() {
+            const blob = new Blob([disp.innerText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = `X200_Log_${Date.now()}.txt`; a.click();
+        }
+        async function disconnectPort() {
+            if (pinger) clearInterval(pinger);
+            streaming = false;
+            if (port) { await port.close(); port = null; log("DISCONNECTED"); }
+        }
+    </script>
+</body>
+</html>
