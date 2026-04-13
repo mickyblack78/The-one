@@ -88,26 +88,44 @@
                     statusEl.style.color = "red";
                     statusEl.innerText = "ECU: DISCONNECTED";
                 }
-            }, 3000);
+            }, 4500);
         }
 
         async function connect() {
-            try {
-                port = await navigator.serial.requestPort();
-                await port.open({ baudRate: 38400 });
-                log("INITIALIZING...");
-                await send("ATZ\r");
-                await send("ATSP6\r");
-                await send("ATSH7E0\r");
-                let auth = await send("1003\r");
-                if (auth.includes("5003")) {
-                    startPinger();
-                    let seedRes = await send("2701\r");
-                    if (seedRes.includes("6701")) {
-                        let unlock = await send("270255AA\r");
-                        if (unlock.includes("6702")) log("SUCCESS: ECU UNLOCKED");
-                    }
-                }
+    try {
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 38400 });
+        log("INITIALIZING...");
+        
+        await send("ATZ\r");
+        await send("ATSP6\r");
+        await send("ATSH7E0\r");
+
+        log("SWITCHING TO EXTENDED SESSION...");
+        let auth = await send("1003\r");
+        
+        if (auth.includes("5003")) {
+            log("SESSION OK. WAITING...");
+            // CRITICAL: Give the ECU 500ms to stabilize in Extended Mode
+            await new Promise(r => setTimeout(r, 500)); 
+            
+            startPinger(); // Start 3E00 to keep the session alive
+
+            let seedRes = await send("2701\r");
+            if (seedRes.includes("6701")) {
+                lastSeed = seedRes.split("6701")[1].substring(0,8);
+                log("SEED RECEIVED: " + lastSeed);
+                log("READY FOR KEY CALCULATION");
+            } else {
+                log("SEED ERROR: " + seedRes); // This is where you'll see 7F2712 if session failed
+            }
+        } else {
+            log("SESSION REJECTED: " + auth);
+        }
+    } catch (e) { log("ERROR: " + e.message); }
+        }
+                    
+        
             } catch (e) { log("ERROR: " + e.message); }
         }
 
@@ -143,6 +161,8 @@
             if (!port) { log("ERROR: NO CONNECTION"); return; }
             isHandshaking = true;
             log("Requesting Level 03 Seed...");
+            await new Promise(r => setTimeout(r, 500));
+            await send("1003\r");
             let res = await send("2703\r");
             if (res.includes("6703")) {
                 lastSeed = res.split("6703")[1];
