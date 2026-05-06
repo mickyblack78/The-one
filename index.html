@@ -1,1 +1,88 @@
+        <        function handleGlobalSave() {
+            (i => savedList.<activity
+    android:name=".MainActivity"
+    android:exported="true"
+    android:windowSoftInputMode="adjustResize">
+    <!-- ... -->
+</activity><?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout 
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root_layout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true"
+    android:background="#DDDDDD">
 
+    <!-- THE DRAWING VIEW (Phase 2 Placeholder) -->
+    <!-- This view will shrink automatically when the keyboard appears -->
+    <View
+        android:id="@+id/drawing_canvas_placeholder"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#FFFFFF"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toTopOf="@+id/bottom_control_bar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- 10% VISIBLE TRANSPARENT BUTTON (Top Left) -->
+    <ImageButton
+        android:id="@+id/master_menu_button"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_margin="12dp"
+        android:padding="12dp"
+        android:scaleType="centerInside"
+        android:background="#1A000000" 
+        android:src="@android:drawable/ic_menu_more"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <!-- BOTTOM CONTROL CONTAINER -->
+    <LinearLayout
+        android:id="@+id/bottom_control_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#F5F5F5"
+        android:elevation="8dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- This row will eventually hold your "Save/Load/Recent" buttons -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <Button
+                android:id="@+id/btn_save"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="SAVE"
+                style="?android:attr/borderlessButtonStyle"/>
+
+            <Button
+                android:id="@+id/btn_load"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="LOAD"
+                style="?android:attr/borderlessButtonStyle"/>
+
+            <Button
+                android:id="@+id/btn_recent"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="RECENT"
+                style="?android:attr/borderlessButtonStyle"/>
+        </LinearLayout>
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>(new Option(i.name, i.name)
